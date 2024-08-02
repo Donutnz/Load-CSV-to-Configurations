@@ -1,0 +1,10 @@
+{
+	"autodeskProduct":	"Fusion",
+	"type":	"script",
+	"author":	"Donutnz",
+	"description":	{
+		"":	"Takes a CSV and creates rows in the configurations top table."
+	},
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
