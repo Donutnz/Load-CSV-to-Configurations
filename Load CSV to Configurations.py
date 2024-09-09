@@ -12,6 +12,8 @@ def run(context):
 
         design=adsk.fusion.Design.cast(app.activeProduct)
 
+        app.log("Starting CSV to Configurations Importer...")
+
         # Check if this is a configured design.
         if not design.isConfiguredDesign:
             ui.messageBox("Error: The current design is not configured! This script can only run on configured designs.")
@@ -68,8 +70,12 @@ def run(context):
                     app.log("Adding...")
 
                 for h,v in csvRow.items():
+                    if h == "": # Skip headerless CSV columns
+                        app.log("Skipping headerless column...")
+                        continue
+
                     for tColumn in topTable.columns:
-                        app.log("Column title: {}".format(tColumn.title))
+                        #app.log("Column title: {}".format(tColumn.title))
                         if h == tColumn.title:
                             cellToBeSet=confRow.getCellByColumnId(tColumn.id)
 
@@ -79,51 +85,70 @@ def run(context):
                             
                             if isinstance(tColumn, adsk.fusion.ConfigurationParameterColumn): # All parameters are numerical. I think.
                                 try:
-                                    cellToBeSet.expression=v
+                                    if cellToBeSet.value != float(v): # Should be expression coz might be an expression in the CSV.
+                                        app.log("Parameter: {}: E={}, V={} -> {}".format(tColumn.title, cellToBeSet.expression, cellToBeSet.value, v))
+                                        #app.log("Test: {}".format(tColumn.parameter)) # Possibly a bug w column.parameter property. Have posted abt it.
+                                        cellToBeSet.expression=v
+                                        changesCnt+=1
                                 except RuntimeError:
                                     app.log("Failed to set column {} to {}.".format(tColumn.title, v))
                                     raise
-                                
-                                changesCnt+=1
 
-                            elif isinstance(tColumn, adsk.fusion.ConfigurationThemeColumn): # Mostly aimed at material for now. Can overcomplicate later.
+                            elif isinstance(tColumn, adsk.fusion.ConfigurationThemeColumn): # Mostly aimed at material and appearance for now. Can overcomplicate later.
+                                themeTCell = adsk.fusion.ConfigurationThemeCell.cast(confRow.getCellByColumnId(tColumn.id))
                                 for m in tColumn.referencedTable.rows:
                                     if v == m.name:
-                                        cellToBeSet.referencedTableRow=m
-                                        app.log("Set theme table row: {}".format(m.name))
-                                        changesCnt+=1
+                                        if themeTCell.referencedTableRow != m:
+                                            app.log("Theme table row: {}: {} -> {}".format(tColumn.title, themeTCell.referencedTableRow.name, m.name))
+                                            themeTCell.referencedTableRow=m
+                                            changesCnt+=1
 
                             elif isinstance(tColumn, adsk.fusion.ConfigurationPropertyColumn): # Description and part number
                                 #app.log("Property {}".format(h))
-                                cellToBeSet.value=v
+                                if cellToBeSet.value != v:
+                                    app.log("Property: {}: {} -> {}".format(tColumn.title, cellToBeSet.value, v))
+                                    cellToBeSet.value=v
 
-                                changesCnt+=1
+                                    changesCnt+=1
 
                             elif isinstance(tColumn, adsk.fusion.ConfigurationSuppressColumn):
-                                if v == "TRUE":
-                                    cellToBeSet.isSuppressed=True
-                                elif v == "FALSE":
-                                    cellToBeSet.isSuppressed=False
+                                if v.upper() == "TRUE":
+                                    vAsBool=True
+                                elif v.upper() == "FALSE":
+                                    vAsBool=False
                                 else:
                                     raise TypeError("Supression type column input data must be TRUE or FALSE. {} column in the input CSV is not bool.".format(tColumn.title))
-                                
-                                changesCnt+=1
+                                    continue
+
+                                vAsBool = not vAsBool # Ugh. "I want it active"=True -> isSuppressed=False
+
+                                if cellToBeSet.isSuppressed != vAsBool:
+                                    app.log("Suppress: {}: {} -> {}".format(tColumn.title, cellToBeSet.isSuppressed, vAsBool))
+                                    cellToBeSet.isSuppressed = vAsBool
+                                    changesCnt+=1
 
                             elif isinstance(tColumn, adsk.fusion.ConfigurationInsertColumn): # Configuration insert. Most sketchy bit and most time inefficent. Should probs get the occurance top table just once.
                                 insTopTable:adsk.fusion.ConfigurationTopTable=tColumn.occurrence.configuredDataFile.configurationTable
 
                                 for tRow in insTopTable.rows:
                                     if tRow.name == v:
-                                        #app.log("Inserted row {} from table {}".format(insTopTable.name, tRow.name))
-                                        cellToBeSet.row=tRow
+                                        if cellToBeSet.row != tRow:
+                                            app.log("Insert: {}: {} -> {}".format(tColumn.title, cellToBeSet.row.name, tRow.name))
+                                            #app.log("Inserted row {} from table {}".format(insTopTable.name, tRow.name))
+                                            cellToBeSet.row=tRow
 
-                                changesCnt+=1
+                                            changesCnt+=1
+
+                            else:
+                                app.log("Unchanged: {}".format(tColumn.title))
+
                 if isUpdating:
-                    app.log("Touched {} columns".format(changesCnt))
+                    app.log("Changed {} columns".format(changesCnt))
 
                 totalRowsCnt+=1
 
         ui.messageBox("Done! Added: {} Updated: {}".format(rowsAddedCnt, rowsUpdatedCnt))
+        app.log("Done")
 
     except:
         if ui:
