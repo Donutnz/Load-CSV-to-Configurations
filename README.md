@@ -18,3 +18,4 @@ NOTE: Script will exit if a setting a configuration results in errors in the tim
 
 ## Done
 * Add Insert column type support.
+* Handle duplicate columns (for Inserts)

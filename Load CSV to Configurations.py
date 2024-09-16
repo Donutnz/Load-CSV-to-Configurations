@@ -1,7 +1,6 @@
 #Author Josh TB
 #Description Loads 
 
-from operator import concat
 import adsk.core, adsk.fusion, adsk.cam, traceback
 import csv
 
@@ -43,7 +42,7 @@ def run(context):
         with open(sourceCSVFilePath) as csvSource:
             csvReader:csv.reader=csv.reader(csvSource) # Not DictReader coz need duplicate columns
 
-            csvHeaderLine=next(csvReader)
+            csvHeaderLine=next(csvReader) # First line in the CSV.
 
             if csvHeaderLine[0] != "Part Number":
                 app.log("Header not found: Part Number")
@@ -55,16 +54,16 @@ def run(context):
             for headerIndex in range(0, len(csvHeaderLine)):
                 for t in unclaimedColumns:
                     if csvHeaderLine[headerIndex] == t.title:
-                        csvHeadersVsColumns.append((headerIndex, t.id, t.title))
+                        csvHeadersVsColumns.append((headerIndex, t.id, t.title)) # Title just makes debugging easier.
                         unclaimedColumns.remove(t)
 
-            #app.log("Headers: {}".format(csvReader.fieldnames))
+            app.log("Headers: {}".format(["{} -> {}".format(x[0], x[2]) for x in csvHeadersVsColumns]))
 
             for csvRow in csvReader:
                 app.log("Starting: {}".format(csvRow[0]))
 
                 if csvRow[0] == "":
-                    app.log("Skipping CSV row with empty Part Number")
+                    app.log("Skipping CSV row with empty Part Number (aka column 0)")
                     continue
 
                 changesCnt=0 # Counts changes
@@ -90,7 +89,6 @@ def run(context):
                     app.log("C: {}".format(colTitle))
                     rowCellValue=csvRow[csvRowIndex]
                     confColumn = topTable.columns.itemById(colID)
-                    #topTable.getCell(confColumn.index, confRow.index)
 
                     if topTable.getCell(confColumn.index, confRow.index) is None:
                         # If this fires, something is seriously weird.
