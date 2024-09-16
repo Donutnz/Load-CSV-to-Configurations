@@ -6,7 +6,7 @@ Reads a CSV containing simple variations and writes it into Fusion 360 Configura
 ## Usage
 Clone into your C:\\Users\\[YOUR_USERNAME]\\AppData\\Roaming\\Autodesk\\Autodesk Fusion 360\\API\\Scripts folder.
 
-CSV must have headers. Headers must contain one "Part Number" column. This will set the row name and part number. See Sample Input file.
+CSV must have headers. "Part Number" must be the first column. This will set the row name and part number. See Sample Input file.
 
 NOTE: Script will exit if a setting a configuration results in errors in the timeline. If this occurs, try rolling the timeline back to start and rerunning the script. 
 

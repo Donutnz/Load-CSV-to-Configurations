@@ -41,17 +41,29 @@ def run(context):
         totalRowsCnt=0
 
         with open(sourceCSVFilePath) as csvSource:
-            csvReader:csv.DictReader=csv.DictReader(csvSource)
-            app.log("Headers: {}".format(csvReader.fieldnames))
+            csvReader:csv.reader=csv.reader(csvSource) # Not DictReader coz need duplicate columns
 
-            if "Part Number" not in csvReader.fieldnames:
+            csvHeaderLine=next(csvReader)
+
+            if csvHeaderLine[0] != "Part Number":
                 app.log("Header not found: Part Number")
                 raise Exception("Header not found: Part Number")
 
-            for csvRow in csvReader:
-                app.log("Starting: {}".format(csvRow["Part Number"]))
+            # Get Headers
+            csvHeadersVsColumns=list() #List ordered by csv headers containing config column ID for that header
+            unclaimedColumns=list(topTable.columns)
+            for headerIndex in range(0, len(csvHeaderLine)):
+                for t in unclaimedColumns:
+                    if csvHeaderLine[headerIndex] == t.title:
+                        csvHeadersVsColumns.append((headerIndex, t.id, t.title))
+                        unclaimedColumns.remove(t)
 
-                if csvRow["Part Number"] == "":
+            #app.log("Headers: {}".format(csvReader.fieldnames))
+
+            for csvRow in csvReader:
+                app.log("Starting: {}".format(csvRow[0]))
+
+                if csvRow[0] == "":
                     app.log("Skipping CSV row with empty Part Number")
                     continue
 
@@ -62,101 +74,89 @@ def run(context):
                 confRow=None 
 
                 for r in topTable.rows:
-                    if r.name == csvRow["Part Number"]:
-                        confRow=topTable.rows.itemByName(csvRow["Part Number"])
+                    if r.name == csvRow[0]:
+                        confRow=topTable.rows.itemById(r.id)
                         rowsUpdatedCnt+=1
                         app.log("Updating...")
                         isUpdating=True
                         break
 
                 if confRow is None:
-                    confRow=topTable.rows.add(csvRow["Part Number"])
+                    confRow=topTable.rows.add(csvRow[0])
                     rowsAddedCnt+=1
                     app.log("Adding...")
-                
-                unsetColumns=list(topTable.columns) # Only set a column value once. Trying this to handle different columns w the same name, speciffically inserts.
 
-                for h,v in csvRow.items():
-                    if h == "": # Skip headerless CSV columns
-                        app.log("Skipping headerless column...")
-                        continue
+                for csvRowIndex, colID, colTitle in csvHeadersVsColumns:
+                    app.log("C: {}".format(colTitle))
+                    rowCellValue=csvRow[csvRowIndex]
+                    confColumn = topTable.columns.itemById(colID)
+                    #topTable.getCell(confColumn.index, confRow.index)
 
+                    if topTable.getCell(confColumn.index, confRow.index) is None:
+                        # If this fires, something is seriously weird.
+                        raise Exception("No cell found in at row: {} column: {}. \n Something really weird has happened.".format(confRow.name, confColumn.title))
+                    
+                    if isinstance(confColumn, adsk.fusion.ConfigurationParameterColumn): # All parameters are numerical. I think.
+                        paramCell:adsk.fusion.ConfigurationParameterCell=topTable.getCell(confColumn.index, confRow.index)
+                        try:
+                            if paramCell.expression != rowCellValue: # Should be expression coz might be an expression in the CSV.
+                                app.log("Parameter: {}: E={}, V={} -> {}".format(confColumn.title, paramCell.expression, paramCell.value, rowCellValue))
+                                #app.log("Test: {}".format(tColumn.parameter)) # Possibly a bug w column.parameter property. Have posted abt it.
+                                paramCell.expression=rowCellValue
+                                changesCnt+=1
+                        except RuntimeError:
+                            app.log("Failed to set column {} to {}.".format(confColumn.title, rowCellValue))
+                            raise
 
-                    for tColumn in unsetColumns:
-                        #app.log("Column title: {}".format(tColumn.title))
-                        if h == tColumn.title:
-
-                            colTitles=""
-                            for c in unsetColumns:
-                                colTitles=concat(colTitles, c.title)
-
-                            app.log("Dropping {} from columns: {}".format(tColumn.title, colTitles))
-                            #unsetColumns.remove(tColumn)
-
-                            cellToBeSet=confRow.getCellByColumnId(tColumn.id)
-
-                            if cellToBeSet is None:
-                                # If this fires, something is seriously weird.
-                                raise Exception("No cell found in at row: {} column: {}. \n Something really weird has happened.".format(confRow.name, tColumn.title))
-                            
-                            if isinstance(tColumn, adsk.fusion.ConfigurationParameterColumn): # All parameters are numerical. I think.
-                                try:
-                                    if cellToBeSet.expression != v: # Should be expression coz might be an expression in the CSV.
-                                        app.log("Parameter: {}: E={}, V={} -> {}".format(tColumn.title, cellToBeSet.expression, cellToBeSet.value, v))
-                                        #app.log("Test: {}".format(tColumn.parameter)) # Possibly a bug w column.parameter property. Have posted abt it.
-                                        cellToBeSet.expression=v
-                                        changesCnt+=1
-                                except RuntimeError:
-                                    app.log("Failed to set column {} to {}.".format(tColumn.title, v))
-                                    raise
-
-                            elif isinstance(tColumn, adsk.fusion.ConfigurationThemeColumn): # Mostly aimed at material and appearance for now. Can overcomplicate later.
-                                themeTCell = adsk.fusion.ConfigurationThemeCell.cast(confRow.getCellByColumnId(tColumn.id))
-                                for m in tColumn.referencedTable.rows:
-                                    if v == m.name:
-                                        if themeTCell.referencedTableRow != m:
-                                            app.log("Theme table row: {}: {} -> {}".format(tColumn.title, themeTCell.referencedTableRow.name, m.name))
-                                            themeTCell.referencedTableRow=m
-                                            changesCnt+=1
-
-                            elif isinstance(tColumn, adsk.fusion.ConfigurationPropertyColumn): # Description and part number
-                                #app.log("Property {}".format(h))
-                                if cellToBeSet.value != v:
-                                    app.log("Property: {}: {} -> {}".format(tColumn.title, cellToBeSet.value, v))
-                                    cellToBeSet.value=v
-
+                    elif isinstance(confColumn, adsk.fusion.ConfigurationThemeColumn): # Mostly aimed at material and appearance for now. Can overcomplicate later.
+                        themeTCell = adsk.fusion.ConfigurationThemeCell.cast(topTable.getCell(confColumn.index, confRow.index))
+                        for m in confColumn.referencedTable.rows:
+                            if rowCellValue == m.name:
+                                if themeTCell.referencedTableRow != m:
+                                    app.log("Theme table row: {}: {} -> {}".format(confColumn.title, themeTCell.referencedTableRow.name, m.name))
+                                    themeTCell.referencedTableRow=m
                                     changesCnt+=1
 
-                            elif isinstance(tColumn, adsk.fusion.ConfigurationSuppressColumn):
-                                if v.upper() == "TRUE":
-                                    vAsBool=True
-                                elif v.upper() == "FALSE":
-                                    vAsBool=False
-                                else:
-                                    raise TypeError("Supression type column input data must be TRUE or FALSE. {} column in the input CSV is not bool.".format(tColumn.title))
-                                    continue
+                    elif isinstance(confColumn, adsk.fusion.ConfigurationPropertyColumn): # Description and part number
+                        #app.log("Property {}".format(h))
+                        propCell:adsk.fusion.ConfigurationPropertyCell=topTable.getCell(confColumn.index, confRow.index)
+                        if propCell.value != rowCellValue:
+                            app.log("Property: {}: {} -> {}".format(confColumn.title, propCell.value, rowCellValue))
+                            propCell.value=rowCellValue
+                            changesCnt+=1
 
-                                vAsBool = not vAsBool # Ugh. "I want it active"=True -> isSuppressed=False
+                    elif isinstance(confColumn, adsk.fusion.ConfigurationSuppressColumn):
+                        if rowCellValue.upper() == "TRUE":
+                            vAsBool=True
+                        elif rowCellValue.upper() == "FALSE":
+                            vAsBool=False
+                        else:
+                            raise TypeError("Supression type column input data must be TRUE or FALSE. {} column in the input CSV is not bool.".format(confColumn.title))
+                            continue
 
-                                if cellToBeSet.isSuppressed != vAsBool:
-                                    app.log("Suppress: {}: {} -> {}".format(tColumn.title, cellToBeSet.isSuppressed, vAsBool))
-                                    cellToBeSet.isSuppressed = vAsBool
+                        vAsBool = not vAsBool # Ugh. "I want it active"=True -> isSuppressed=False
+
+                        suppressCell:adsk.fusion.ConfigurationSuppressCell=topTable.getCell(confColumn.index, confRow.index)
+
+                        if suppressCell.isSuppressed != vAsBool:
+                            app.log("Suppress: {}: {} -> {}".format(confColumn.title, suppressCell.isSuppressed, vAsBool))
+                            suppressCell.isSuppressed = vAsBool
+                            changesCnt+=1
+
+                    elif isinstance(confColumn, adsk.fusion.ConfigurationInsertColumn): # Configuration insert. Most sketchy bit and most time inefficent. Should probs get the occurance top table just once.
+                        insTopTable:adsk.fusion.ConfigurationTopTable=confColumn.occurrence.configuredDataFile.configurationTable
+
+                        insCell:adsk.fusion.ConfigurationInsertCell=topTable.getCell(confColumn.index, confRow.index)
+                        for tRow in insTopTable.rows:
+                            if tRow.name == rowCellValue:
+                                if insCell.row != tRow:
+                                    app.log("Insert: {}: {} -> {}".format(confColumn.title, insCell.row.name, tRow.name))
+                                    #app.log("Inserted row {} from table {}".format(insTopTable.name, tRow.name))
+                                    insCell.row=tRow
+
                                     changesCnt+=1
-
-                            elif isinstance(tColumn, adsk.fusion.ConfigurationInsertColumn): # Configuration insert. Most sketchy bit and most time inefficent. Should probs get the occurance top table just once.
-                                insTopTable:adsk.fusion.ConfigurationTopTable=tColumn.occurrence.configuredDataFile.configurationTable
-
-                                for tRow in insTopTable.rows:
-                                    if tRow.name == v:
-                                        if cellToBeSet.row != tRow:
-                                            app.log("Insert: {}: {} -> {}".format(tColumn.title, cellToBeSet.row.name, tRow.name))
-                                            #app.log("Inserted row {} from table {}".format(insTopTable.name, tRow.name))
-                                            cellToBeSet.row=tRow
-
-                                            changesCnt+=1
-                            else:
-                                app.log("Unchanged: {}".format(tColumn.title))
-                            unsetColumns.remove(tColumn)
+                    else:
+                        app.log("Unchanged: {}".format(confColumn.title))
 
                 if isUpdating:
                     app.log("Changed {} columns".format(changesCnt))
