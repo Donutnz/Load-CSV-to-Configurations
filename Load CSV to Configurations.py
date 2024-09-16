@@ -1,6 +1,7 @@
 #Author Josh TB
 #Description Loads 
 
+from operator import concat
 import adsk.core, adsk.fusion, adsk.cam, traceback
 import csv
 
@@ -50,6 +51,10 @@ def run(context):
             for csvRow in csvReader:
                 app.log("Starting: {}".format(csvRow["Part Number"]))
 
+                if csvRow["Part Number"] == "":
+                    app.log("Skipping CSV row with empty Part Number")
+                    continue
+
                 changesCnt=0 # Counts changes
 
                 isUpdating=False # If a new config row is created or updating an existing one.
@@ -68,15 +73,26 @@ def run(context):
                     confRow=topTable.rows.add(csvRow["Part Number"])
                     rowsAddedCnt+=1
                     app.log("Adding...")
+                
+                unsetColumns=list(topTable.columns) # Only set a column value once. Trying this to handle different columns w the same name, speciffically inserts.
 
                 for h,v in csvRow.items():
                     if h == "": # Skip headerless CSV columns
                         app.log("Skipping headerless column...")
                         continue
 
-                    for tColumn in topTable.columns:
+
+                    for tColumn in unsetColumns:
                         #app.log("Column title: {}".format(tColumn.title))
                         if h == tColumn.title:
+
+                            colTitles=""
+                            for c in unsetColumns:
+                                colTitles=concat(colTitles, c.title)
+
+                            app.log("Dropping {} from columns: {}".format(tColumn.title, colTitles))
+                            #unsetColumns.remove(tColumn)
+
                             cellToBeSet=confRow.getCellByColumnId(tColumn.id)
 
                             if cellToBeSet is None:
@@ -85,7 +101,7 @@ def run(context):
                             
                             if isinstance(tColumn, adsk.fusion.ConfigurationParameterColumn): # All parameters are numerical. I think.
                                 try:
-                                    if cellToBeSet.value != float(v): # Should be expression coz might be an expression in the CSV.
+                                    if cellToBeSet.expression != v: # Should be expression coz might be an expression in the CSV.
                                         app.log("Parameter: {}: E={}, V={} -> {}".format(tColumn.title, cellToBeSet.expression, cellToBeSet.value, v))
                                         #app.log("Test: {}".format(tColumn.parameter)) # Possibly a bug w column.parameter property. Have posted abt it.
                                         cellToBeSet.expression=v
@@ -138,9 +154,9 @@ def run(context):
                                             cellToBeSet.row=tRow
 
                                             changesCnt+=1
-
                             else:
                                 app.log("Unchanged: {}".format(tColumn.title))
+                            unsetColumns.remove(tColumn)
 
                 if isUpdating:
                     app.log("Changed {} columns".format(changesCnt))
