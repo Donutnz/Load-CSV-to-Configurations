@@ -4,6 +4,19 @@
 import adsk.core, adsk.fusion, adsk.cam, traceback
 import csv
 
+def extractBool(strWBool:str):
+    """Extracts bool from CSV string
+
+    strWBool: str String containing some for of TRUE or FALSE 
+    """
+    if strWBool.upper() == "TRUE":
+        retBool=True
+    elif strWBool.upper() == "FALSE":
+        retBool=False
+    else:
+        raise TypeError("Supression type column input data must be TRUE or FALSE. Column in the input CSV is not bool.")
+    return retBool
+
 def run(context):
     ui = None
     try:
@@ -86,7 +99,7 @@ def run(context):
                     app.log("Adding...")
 
                 for csvRowIndex, colID, colTitle in csvHeadersVsColumns:
-                    app.log("C: {}".format(colTitle))
+                    #app.log("Column: {}".format(colTitle))
                     rowCellValue=csvRow[csvRowIndex]
                     confColumn = topTable.columns.itemById(colID)
 
@@ -97,14 +110,21 @@ def run(context):
                     if isinstance(confColumn, adsk.fusion.ConfigurationParameterColumn): # All parameters are numerical. I think.
                         paramCell:adsk.fusion.ConfigurationParameterCell=topTable.getCell(confColumn.index, confRow.index)
                         try:
-                            if paramCell.expression != rowCellValue: # Should be expression coz might be an expression in the CSV.
-                                app.log("Parameter: {}: E={}, V={} -> {}".format(confColumn.title, paramCell.expression, paramCell.value, rowCellValue))
-                                #app.log("Test: {}".format(tColumn.parameter)) # Possibly a bug w column.parameter property. Have posted abt it.
-                                paramCell.expression=rowCellValue
+                            cellAsFloat=float(rowCellValue)/10 # Convert mm to cm (Fusion's internal units is cm)
+                            if paramCell.value != cellAsFloat:
+                                app.log("Parameter: {}: E={}, V={} -> {}".format(confColumn.title, paramCell.expression, paramCell.value, cellAsFloat))
+                                paramCell.value=cellAsFloat
                                 changesCnt+=1
-                        except RuntimeError:
-                            app.log("Failed to set column {} to {}.".format(confColumn.title, rowCellValue))
-                            raise
+                        except ValueError:
+                            app.log("Parameter {} is expression: {}".format(confColumn.title, rowCellValue))
+                            try:
+                                if paramCell.expression != rowCellValue: # Expression because CSV might be expression and for fractional inch stuff.
+                                    app.log("Parameter: {}: E={}, V={} -> {}".format(confColumn.title, paramCell.expression, paramCell.value, rowCellValue))
+                                    paramCell.expression=rowCellValue
+                                    changesCnt+=1
+                            except RuntimeError:
+                                app.log("Failed to set column {} to {}.".format(confColumn.title, rowCellValue))
+                                raise
 
                     elif isinstance(confColumn, adsk.fusion.ConfigurationThemeColumn): # Mostly aimed at material and appearance for now. Can overcomplicate later.
                         themeTCell = adsk.fusion.ConfigurationThemeCell.cast(topTable.getCell(confColumn.index, confRow.index))
@@ -124,13 +144,7 @@ def run(context):
                             changesCnt+=1
 
                     elif isinstance(confColumn, adsk.fusion.ConfigurationSuppressColumn):
-                        if rowCellValue.upper() == "TRUE":
-                            vAsBool=True
-                        elif rowCellValue.upper() == "FALSE":
-                            vAsBool=False
-                        else:
-                            raise TypeError("Supression type column input data must be TRUE or FALSE. {} column in the input CSV is not bool.".format(confColumn.title))
-                            continue
+                        vAsBool = extractBool(rowCellValue)
 
                         vAsBool = not vAsBool # Ugh. "I want it active"=True -> isSuppressed=False
 
@@ -153,6 +167,25 @@ def run(context):
                                     insCell.row=tRow
 
                                     changesCnt+=1
+                    elif isinstance(confColumn, adsk.fusion.ConfigurationJointSnapColumn): # TODO
+                        app.log("Joint Snap column not supported yet")
+
+                    elif isinstance(confColumn, adsk.fusion.ConfigurationFeatureAspectColumn): # WIP
+                        #app.log("Feature Aspect Column: {} WIP!!!".format(confColumn.title))
+                        if topTable.getCell(confColumn.index, confRow.index).objectType == adsk.fusion.ConfigurationFeatureAspectBooleanCell.classType():
+                            app.log("Bool Aspect")
+                            aspectBoolCell:adsk.fusion.ConfigurationFeatureAspectBooleanCell=topTable.getCell(confColumn.index, confRow.index)
+                            isActive=extractBool(rowCellValue)
+
+                            if aspectBoolCell.value != isActive:
+                                app.log("Aspect (bool): {}: {} -> {}".format(confColumn.title, aspectBoolCell.value, rowCellValue))
+                                aspectBoolCell.value=isActive
+                                changesCnt+=1
+                        elif topTable.getCell(confColumn.index, confRow.index).objectType == adsk.fusion.ConfigurationFeatureAspectStringCell.classType(): # confColumn.feature.objectType = adsk::fusion::ThreadFeature
+                            strAspect:adsk.fusion.ConfigurationFeatureAspectStringCell=topTable.getCell(confColumn.index, confRow.index)
+                            app.log("Aspect (String): {}: {} -> {}".format(confColumn.title, strAspect.value, rowCellValue))
+                            strAspect.value=rowCellValue
+                            changesCnt+=1
                     else:
                         app.log("Unchanged: {}".format(confColumn.title))
 
