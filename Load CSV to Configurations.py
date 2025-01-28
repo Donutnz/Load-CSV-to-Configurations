@@ -43,6 +43,7 @@ def run(context):
 		if dlgResult == adsk.core.DialogResults.DialogOK:
 			sourceCSVFilePath=csvFileDlg.filename
 		else:
+			app.log("Cancelled: No file selected")
 			return
 		
 		topTable=design.configurationTopTable
@@ -69,6 +70,7 @@ def run(context):
 					if csvHeaderLine[headerIndex] == t.title:
 						csvHeadersVsColumns.append((headerIndex, t.id, t.title)) # Title just makes debugging easier.
 						unclaimedColumns.remove(t)
+						break
 
 			app.log("Headers: {}".format(", ".join(["{} -> {}".format(x[0], x[2]) for x in csvHeadersVsColumns])))
 
@@ -88,14 +90,12 @@ def run(context):
 				for r in topTable.rows:
 					if r.name == csvRow[0]:
 						confRow=topTable.rows.itemById(r.id)
-						rowsUpdatedCnt+=1
 						app.log("Updating...")
 						isUpdating=True
 						break
 
 				if confRow is None:
 					confRow=topTable.rows.add(csvRow[0])
-					rowsAddedCnt+=1
 					app.log("Adding...")
 
 				for csvRowIndex, colID, colTitle in csvHeadersVsColumns:
@@ -112,6 +112,8 @@ def run(context):
 
 						# Can do a convert to float and compare values thing when the user parameter from config columns bug is fixed.
 
+						#testParam=topTable.columns.itemById(colID) # Testing for if unit is still broken
+						#app.log("Test: {}".format(testParam.unit))
 						#app.log("Parameter {} is expression: {}".format(confColumn.title, rowCellValue))
 						try:
 							if paramCell.expression != rowCellValue: # Expression because CSV might be expression and for fractional inch stuff.
@@ -152,17 +154,23 @@ def run(context):
 							changesCnt+=1
 
 					elif isinstance(confColumn, adsk.fusion.ConfigurationInsertColumn): # Configuration insert. Most sketchy bit and most time inefficent. Should probs get the occurance top table just once.
-						insTopTable:adsk.fusion.ConfigurationTopTable=confColumn.occurrence.configuredDataFile.configurationTable
+						if not confColumn.occurrence.isValid:
+							app.log("Urg Argh")
+						insTopTable:adsk.fusion.ConfigurationTopTable=confColumn.occurrence.configuredDataFile.latestVersion.configurationTable
+
+						if insTopTable is None:
+							app.log("WARNING: No config table returned for config column (line 158)")
 
 						insCell:adsk.fusion.ConfigurationInsertCell=topTable.getCell(confColumn.index, confRow.index)
 						for tRow in insTopTable.rows:
 							if tRow.name == rowCellValue:
-								if insCell.row != tRow:
+								if insCell.row.id != tRow.id:
 									app.log("Insert: {}: {} -> {}".format(confColumn.title, insCell.row.name, tRow.name))
 									#app.log("Inserted row {} from table {}".format(insTopTable.name, tRow.name))
 									insCell.row=tRow
 
 									changesCnt+=1
+								break
 					elif isinstance(confColumn, adsk.fusion.ConfigurationJointSnapColumn): # TODO
 						app.log("Joint Snap column not supported yet")
 
@@ -180,13 +188,17 @@ def run(context):
 						elif topTable.getCell(confColumn.index, confRow.index).objectType == adsk.fusion.ConfigurationFeatureAspectStringCell.classType(): # confColumn.feature.objectType = adsk::fusion::ThreadFeature
 							strAspect:adsk.fusion.ConfigurationFeatureAspectStringCell=topTable.getCell(confColumn.index, confRow.index)
 							app.log("Aspect (String): {}: {} -> {}".format(confColumn.title, strAspect.value, rowCellValue))
-							strAspect.value=rowCellValue
+							strAspect.value=str(rowCellValue)
 							changesCnt+=1
 					else:
 						app.log("Unchanged: {}".format(confColumn.title))
 
-				if isUpdating:
+				if changesCnt > 0:
 					app.log("Changed {} columns".format(changesCnt))
+					if isUpdating:
+						rowsUpdatedCnt+=1
+					else:
+						rowsAddedCnt+=1
 
 				totalRowsCnt+=1
 
