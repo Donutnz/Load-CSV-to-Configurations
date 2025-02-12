@@ -64,13 +64,21 @@ def run(context):
 
 			# Get Headers
 			csvHeadersVsColumns=list() #List ordered by csv headers containing config column ID for that header
+			aspectColumns=list() # Apply specifically thread aspects last. Can fix issues.
 			unclaimedColumns=list(topTable.columns)
 			for headerIndex in range(0, len(csvHeaderLine)):
 				for t in unclaimedColumns:
 					if csvHeaderLine[headerIndex] == t.title:
-						csvHeadersVsColumns.append((headerIndex, t.id, t.title)) # Title just makes debugging easier.
+
+						# Do thread changes last
+						if t.objectType == adsk.fusion.ConfigurationFeatureAspectColumn.classType():
+							aspectColumns.append((headerIndex, t.id, t.title))
+						else:
+							csvHeadersVsColumns.append((headerIndex, t.id, t.title)) # Title just makes debugging easier.
 						unclaimedColumns.remove(t)
 						break
+
+			csvHeadersVsColumns = csvHeadersVsColumns + aspectColumns
 
 			app.log("Headers: {}".format(", ".join(["{} -> {}".format(x[0], x[2]) for x in csvHeadersVsColumns])))
 

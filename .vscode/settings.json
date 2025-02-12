@@ -3,12 +3,10 @@
 		"C:\\Users\\Mainutnz\\AppData\\Roaming\\Autodesk\\Autodesk Fusion 360\\API\\Python\\defs"
 	],
 	"python.analysis.extraPaths":	["C:/Users/Mainutnz/AppData/Roaming/Autodesk/Autodesk Fusion 360/API/Python/defs"],
-	"python.defaultInterpreterPath":	"C:/Users/Mainutnz/AppData/Local/Autodesk/webdeploy/production/150c0e7caea490c7c5c22653564a2af647863154/Python/python.exe",
-	"fusion-360-helper.enabled":	true,
-	"fusion-360-helper.python.pythonPath":	"C:\\Users\\Mainutnz\\AppData\\Local\\Autodesk\\webdeploy\\production\\fe6fc4e563d5e777991ef05dfeb93ed8d5cbf331\\Python\\python.exe",
-	"fusion-360-helper.python.extraLibs":	[
+	"python.defaultInterpreterPath": "C:/Users/Mainutnz/AppData/Local/Autodesk/webdeploy/production/30c9d5533837458c62c42054f4d8a9dcee4200a0/Python/python.exe",
+	"fusion-360-helper.enabled": true,
+	"fusion-360-helper.python.pythonPath": "C:\\Users\\Mainutnz\\AppData\\Local\\Autodesk\\webdeploy\\production\\778460b9c71e3a1499585e5d8456468dad28c923\\Python\\python.exe",
+	"fusion-360-helper.python.extraLibs": [
 		"C:\\Users\\Mainutnz\\AppData\\Roaming\\Autodesk\\Autodesk Fusion 360\\API\\Python\\defs"
-	],
-	"python.analysis.typeCheckingMode":	"off",
-	"python.analysis.autoImportCompletions":	true
+	]
 }
