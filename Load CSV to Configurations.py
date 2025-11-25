@@ -39,6 +39,7 @@ def run(context):
 		csvFileDlg.filter='CSV Files (*.csv)'
 		csvFileDlg.isMultiSelectEnabled=False
 		
+		# Select source CSV
 		dlgResult=csvFileDlg.showOpen()
 		if dlgResult == adsk.core.DialogResults.DialogOK:
 			sourceCSVFilePath=csvFileDlg.filename
@@ -46,6 +47,14 @@ def run(context):
 			app.log("Cancelled: No file selected")
 			return
 		
+		# Skip things that make this faster but possibly more buggy
+		skipOptimisations=False
+
+		# WIP: Put question dialog about full run here
+
+		app.log("Skip Optimisations: {}".format(skipOptimisations))
+
+
 		topTable=design.configurationTopTable
 
 		#TODO Add csv sniffer to check headers are there and correct.
@@ -80,7 +89,9 @@ def run(context):
 
 			csvHeadersVsColumns = csvHeadersVsColumns + aspectColumns
 
-			app.log("Headers: {}".format(", ".join(["{} -> {}".format(x[0], x[2]) for x in csvHeadersVsColumns])))
+			app.log("Headers: {}".format("\n".join(["{} -> {}".format(x[0], x[2]) for x in csvHeadersVsColumns])))
+
+			app.log("Unaffected Configurations Columns: {}".format(", ".join([x.title for x in unclaimedColumns])))
 
 			for csvRow in csvReader:
 				app.log("Starting: {}".format(csvRow[0]))
@@ -125,6 +136,13 @@ def run(context):
 						#app.log("Parameter {} is expression: {}".format(confColumn.title, rowCellValue))
 						try:
 							if paramCell.expression != rowCellValue: # Expression because CSV might be expression and for fractional inch stuff.
+
+								# Fusion stores everything as cm not mm. This is until the user parameter unit thing is fixed
+								if not skipOptimisations:
+									if paramCell.value * 10 == rowCellValue:
+										app.log("Skipped: {}".format(confColumn.title))
+										continue
+								
 								app.log("Parameter: {}: E={}, V={} -> {}".format(confColumn.title, paramCell.expression, paramCell.value, rowCellValue))
 								paramCell.expression=rowCellValue
 								changesCnt+=1
@@ -184,6 +202,7 @@ def run(context):
 
 					elif isinstance(confColumn, adsk.fusion.ConfigurationFeatureAspectColumn): # WIP
 						#app.log("Feature Aspect Column: {} WIP!!!".format(confColumn.title))
+						design.computeAll() # Threads seem like they like to fail so this might fix
 						if topTable.getCell(confColumn.index, confRow.index).objectType == adsk.fusion.ConfigurationFeatureAspectBooleanCell.classType():
 							app.log("Bool Aspect")
 							aspectBoolCell:adsk.fusion.ConfigurationFeatureAspectBooleanCell=topTable.getCell(confColumn.index, confRow.index)
@@ -196,6 +215,8 @@ def run(context):
 						elif topTable.getCell(confColumn.index, confRow.index).objectType == adsk.fusion.ConfigurationFeatureAspectStringCell.classType(): # confColumn.feature.objectType = adsk::fusion::ThreadFeature
 							strAspect:adsk.fusion.ConfigurationFeatureAspectStringCell=topTable.getCell(confColumn.index, confRow.index)
 							app.log("Aspect (String): {}: {} -> {}".format(confColumn.title, strAspect.value, rowCellValue))
+							if not strAspect.isValid:
+								app.log("Invalid str aspect: {}".format(confColumn.title))
 							strAspect.value=str(rowCellValue)
 							changesCnt+=1
 					else:
