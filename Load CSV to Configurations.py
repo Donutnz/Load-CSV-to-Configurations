@@ -120,7 +120,7 @@ def run(context):
 				for csvRowIndex, colID, colTitle in csvHeadersVsColumns:
 					#app.log("Column: {}".format(colTitle))
 					rowCellValue=csvRow[csvRowIndex]
-					confColumn = topTable.columns.itemById(colID)
+					confColumn:adsk.fusion.ConfigurationColumn = topTable.columns.itemById(colID) 
 
 					if topTable.getCell(confColumn.index, confRow.index) is None:
 						# If this fires, something is seriously weird.
@@ -185,7 +185,7 @@ def run(context):
 						insTopTable:adsk.fusion.ConfigurationTopTable=confColumn.occurrence.configuredDataFile.latestVersion.configurationTable
 
 						if insTopTable is None:
-							app.log("WARNING: No config table returned for config column (line 158)")
+							app.log("WARNING: No config table returned for config column (line 188)")
 
 						insCell:adsk.fusion.ConfigurationInsertCell=topTable.getCell(confColumn.index, confRow.index)
 						for tRow in insTopTable.rows:
